@@ -1,11 +1,11 @@
 module Tests.Decode
 
-#if FABLE_COMPILER
+// #if FABLE_COMPILER
 open Fable.Core.JsInterop
 open Thoth.Json.Decode
-#else
-open Thoth.Json.Net.Decode
-#endif
+// #else
+// open Thoth.Json.Net.Decode
+// #endif
 open Util.Testing
 
 type Record2 =
@@ -112,7 +112,7 @@ type User =
       Email : string
       Followers : int }
 
-    static member Create id email name followers =
+    static member Create id name email followers =
         { Id = id
           Name = name
           Email = email
@@ -120,6 +120,9 @@ type User =
 
 type SmallRecord =
     { fieldA: string }
+
+type SmallRecord2 =
+    { optionalField : string option }
 
 let jsonRecord =
     """{ "a": 1.0,
@@ -226,64 +229,106 @@ let tests : Test =
 
             testCase "field.Required works" <| fun _ ->
                 let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Ok("maxime")
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Field "name" string }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Required "name" string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "field.Required returns error if field is missing" <| fun _ ->
-                let json = """{ "name": "maxime", "age": 25 }"""
+                let json = """{ "age": 25 }"""
                 let expected =
                     Error(
                         """
-Expecting an object with a field named `height` but instead got:
+Expecting an object with a field named `name` but instead got:
 {
-    "name": "maxime",
     "age": 25
 }
                         """.Trim())
 
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Field "name" string }
+                        )
+
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Required "height" string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "field.Required returns Error if type is incorrect" <| fun _ ->
-                let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Error("""Expecting an int but instead got: "maxime" """.Trim())
+                let json = """{ "name": 12, "age": 25 }"""
+                let expected = Error("""Expecting a string but instead got: 12 """.Trim())
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Field "name" string }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Required "name" int) json
+                    decodeString decoder json
 
                 equal expected actual
-
 
             testCase "field.Optional works" <| fun _ ->
                 let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Ok (Some "maxime")
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Field "name" string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Optional "name" string) json
+                    decodeString decoder json
 
                 equal expected actual
 
-            testCase "field.Optional returns Ok None if field is missing" <| fun _ ->
-                let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Ok None
+            testCase "field.Optional returns fallback value if field is missing" <| fun _ ->
+                let json = """{ "age": 25 }"""
+                let expected = Ok({ fieldA = "field was missing" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Field "name" string "field was missing" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Optional "height" string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "field.Optional returns Error if type is incorrect" <| fun _ ->
-                let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Error("""Expecting an int but instead got: "maxime" """.Trim())
+                let json = """{ "name": 12, "age": 25 }"""
+                let expected =
+                    Error(
+                        """
+I run into a `fail` decoder.
+I run into the following problems:
+
+Expecting a string but instead got: 12
+Expecting null but instead got: 12
+                        """.Trim())
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Field "name" string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { field = field } -> field.Optional "name" int) json
+                    decodeString decoder json
 
                 equal expected actual
 
@@ -291,10 +336,16 @@ Expecting an object with a field named `height` but instead got:
             testCase "at.Required works" <| fun _ ->
 
                 let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Ok "maxime"
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.At [ "user"; "name" ] string }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Required ["user"; "name"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
@@ -307,8 +358,14 @@ Expecting an object at `user` but instead got:
 "maxime"
                         """.Trim())
 
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.At [ "user"; "name" ] string }
+                        )
+
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Required ["user"; "name"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
@@ -327,58 +384,120 @@ Expecting an object with path `user.firstname` but instead got:
 Node `firstname` is unkown.
                         """.Trim())
 
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.At [ "user"; "firstname" ] string }
+                        )
+
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Required ["user"; "firstname"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "at.Required returns Error if type is incorrect" <| fun _ ->
-                let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Error("""Expecting an int but instead got: "maxime" """.Trim())
+                let json = """{ "user": { "name": 12, "age": 25 } }"""
+                let expected = Error "Expecting a string but instead got: 12"
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.At [ "user"; "name" ] string }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Required ["user"; "name"] int) json
+                    decodeString decoder json
 
                 equal expected actual
-
 
             testCase "at.Optional works" <| fun _ ->
 
                 let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Ok (Some "maxime")
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Optional ["user"; "name"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "at.Optional returns Ok None if non-object in path" <| fun _ ->
                 let json = """{ "user": "maxime" }"""
-                let expected = Ok None
+                let expected = Ok({ fieldA = "" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Optional ["user"; "name"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "at.Optional returns Ok None if field missing" <| fun _ ->
                 let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Ok None
+                let expected = Ok({ fieldA = "" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.At [ "user"; "firstname" ] string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Optional ["user"; "firstname"] string) json
+                    decodeString decoder json
 
                 equal expected actual
 
             testCase "at.Optional returns Error if type is incorrect" <| fun _ ->
-                let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Error("""Expecting an int but instead got: "maxime" """.Trim())
+                let json = """{ "user": { "name": 12, "age": 25 } }"""
+                let expected =
+                    Error
+                        ("""
+I run into a `fail` decoder.
+I run into the following problems:
+
+Expecting a string but instead got: 12
+Expecting null but instead got: 12
+                        """.Trim())
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                        )
 
                 let actual =
-                    decodeString (object <| fun { at = at } -> at.Optional ["user"; "name"] int) json
+                    decodeString decoder json
 
                 equal expected actual
 
+            testCase "complex object builder works" <| fun _ ->
+                let expected =
+                    Ok(User.Create 67 "" "user@mail.com" 0)
+
+                let userDecoder =
+                    object
+                        (fun get ->
+                            { Id = get.Required.Field "id" int
+                              Name = get.Optional.Field "name" string ""
+                              Email = get.Required.Field "email" string
+                              Followers = 0 }
+                        )
+
+                let actual =
+                    decodeString
+                        userDecoder
+                        """{ "id": 67, "email": "user@mail.com" }"""
+
+                equal expected actual
         ]
 
         testList "Object primitives" [
@@ -635,7 +754,7 @@ Expecting an object but instead got:
 
                 equal expectedValid actualValid
 
-                let expectedInvalidType = Ok(None)
+                let expectedInvalidType = Error("Expecting an int but instead got: \"maxime\"")
                 let actualInvalidType =
                     decodeString (option (field "name" int) ) json
 
@@ -685,7 +804,7 @@ Expecting an object but instead got:
 
             testCase "fail works" <| fun _ ->
                 let msg = "Failing because it's fun"
-                let expected = Error("I run into a `fail` decoder: " + msg)
+                let expected = Error("I run into a `fail` decoder.\n" + msg)
                 let actual =
                     decodeString (fail msg) "true"
 
@@ -912,13 +1031,18 @@ Expecting an object with a field named `version` but instead got:
 
             testCase "required works" <| fun _ ->
                 let expected =
-                    Ok(User.Create 67 "user@mail.com" "" 0)
+                    Ok(User.Create 67 "" "user@mail.com" 0)
 
                 let userDecoder =
-                    decode User.Create
+                    decode
+                        (fun id name email followers ->
+                            { Id = id
+                              Name = name
+                              Email = email
+                              Followers = followers } )
                         |> required "id" int
-                        |> required "email" string
                         |> optional "name" string ""
+                        |> required "email" string
                         |> hardcoded 0
 
                 let actual =
