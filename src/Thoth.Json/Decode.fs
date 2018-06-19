@@ -497,13 +497,15 @@ let optionalDecoder pathDecoder valDecoder fallback =
                 succeed finalResult
 
             | Error finalErr ->
+                printfn "Error: %A" finalErr
                 fail finalErr
 
         | Error ((BadType _ ) as errorInfo) ->
             // If the error is of type `BadType` coming from `at` decoder then return the error
             // This mean the json was expecting an object but got an array instead
             fun _ -> Error errorInfo
-        | Error _ ->
+        | Error error ->
+            printfn "Error: %A" error
             // Field was not present && type was valid
             succeed fallback
 
@@ -533,10 +535,12 @@ let optionalAt (path : string list) (valDecoder : Decoder<'a>) (fallback : 'a) (
 type IRequiredGetter =
     abstract Field : string -> Decoder<'a> -> 'a
     abstract At : List<string> -> Decoder<'a> -> 'a
+    abstract Index : int -> Decoder<'a> -> 'a
 
 type IOptionalGetter =
     abstract Field : string -> Decoder<'a> -> 'a -> 'a
     abstract At : List<string> -> Decoder<'a> -> 'a -> 'a
+    abstract Index : int -> Decoder<'a> -> 'a -> 'a
 
 type IGetters =
     abstract Required: IRequiredGetter
@@ -544,31 +548,36 @@ type IGetters =
 
 let object (builder: IGetters -> 'value) : Decoder<'value> =
     fun v ->
-        if Helpers.isObject v then
-            builder { new IGetters with
-                member __.Required =
-                    { new IRequiredGetter with
-                        member __.Field (fieldName : string) (decoder : Decoder<_>) =
-                            match decodeValue (field fieldName decoder) v with
-                            | Ok v -> v
-                            | Error msg -> failwith msg
-                        member __.At (fieldNames : string list) (decoder : Decoder<_>) =
-                            match decodeValue (at fieldNames decoder) v with
-                            | Ok v -> v
-                            | Error msg -> failwith msg }
-                member __.Optional =
-                    { new IOptionalGetter with
-                        member __.Field (fieldName : string) (decoder : Decoder<_>) fallback =
-                            match optionalDecoder (field fieldName value) decoder fallback v with
-                            | Ok v -> v
-                            | Error msg ->
-                                failwith (errorToString msg)
-                        member __.At (fieldNames : string list) (decoder : Decoder<_>) fallback =
-                            match optionalDecoder (at fieldNames value) decoder fallback v with
-                            | Ok v -> v
-                            | Error msg ->
-                                failwith (errorToString msg) }
-            } |> Ok
-        else
-            BadType("an object", value)
-            |> Error
+        builder { new IGetters with
+            member __.Required =
+                { new IRequiredGetter with
+                    member __.Field (fieldName : string) (decoder : Decoder<_>) =
+                        match decodeValue (field fieldName decoder) v with
+                        | Ok v -> v
+                        | Error msg -> failwith msg
+                    member __.At (fieldNames : string list) (decoder : Decoder<_>) =
+                        match decodeValue (at fieldNames decoder) v with
+                        | Ok v -> v
+                        | Error msg -> failwith msg
+                    member __.Index (requestedIndex: int) (decoder : Decoder<_>) =
+                        match decodeValue (index requestedIndex decoder) v with
+                        | Ok v -> v
+                        | Error msg -> failwith msg }
+            member __.Optional =
+                { new IOptionalGetter with
+                    member __.Field (fieldName : string) (decoder : Decoder<_>) fallback =
+                        match optionalDecoder (field fieldName value) decoder fallback v with
+                        | Ok v -> v
+                        | Error msg ->
+                            failwith (errorToString msg)
+                    member __.At (fieldNames : string list) (decoder : Decoder<_>) fallback =
+                        match optionalDecoder (at fieldNames value) decoder fallback v with
+                        | Ok v -> v
+                        | Error msg ->
+                            failwith (errorToString msg)
+                    member __.Index (requestedIndex: int) (decoder : Decoder<_>) fallback =
+                        match optionalDecoder (index requestedIndex value) decoder fallback v with
+                        | Ok v -> v
+                        | Error msg ->
+                            failwith (errorToString msg) }
+        } |> Ok

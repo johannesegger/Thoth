@@ -498,6 +498,112 @@ Expecting null but instead got: 12
                         """{ "id": 67, "email": "user@mail.com" }"""
 
                 equal expected actual
+
+            testCase "index.Required works" <| fun _ ->
+                let json = """[ "maxime", "alfonso" ]"""
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Index 0 string }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "index.Required return an error if invalid index" <| fun _ ->
+                let json = """[ "maxime", "alfonso" ]"""
+                let expected =
+                    Error (
+                        """
+Expecting a longer array. Need index `4` but there are only `2` entries.
+[
+    "maxime",
+    "alfonso"
+]
+                        """.Trim())
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Index 4 string }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "index.Optional works" <| fun _ ->
+                let json = """[ "maxime", "alfonso" ]"""
+                let expected = Ok({ fieldA = "maxime" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Index 0 string "fallback" }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "index.Optional works with fallback value if invalid index" <| fun _ ->
+                let json = """[ "maxime", "alfonso" ]"""
+                let expected = Ok({ fieldA = "fallback" })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Index 4 string "fallback" }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "index.Required return an error if invalid type" <| fun _ ->
+                let json = """[ 12, 13 ]"""
+                let expected = Error "Expecting a string but instead got: 12"
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Required.Index 0 string }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "index.Optional return an error if invalid type" <| fun _ ->
+                let json = """[ 12, 13 ]"""
+                let expected =
+                    Error (
+                        """
+I run into a `fail` decoder.
+I run into the following problems:
+
+Expecting a string but instead got: 12
+Expecting null but instead got: 12
+                        """.Trim())
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { fieldA = get.Optional.Index 0 string "fallback" }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
         ]
 
         testList "Object primitives" [
