@@ -206,8 +206,11 @@ let at (fieldNames: string list) (decoder : Decoder<'value>) : Decoder<'value> =
         with
             | NonObjectTypeException ->
                 let path = String.concat "." fieldNames.[..index-1]
+                // if index = 0 then
                 BadType ("an object at `" + path + "`", cValue)
                 |> Error
+                // else
+
             | UndefinedValueException fieldName ->
                 let msg = "an object with path `" + (String.concat "." fieldNames) + "`"
                 BadPath (msg, value, fieldName)
@@ -535,12 +538,10 @@ let optionalAt (path : string list) (valDecoder : Decoder<'a>) (fallback : 'a) (
 type IRequiredGetter =
     abstract Field : string -> Decoder<'a> -> 'a
     abstract At : List<string> -> Decoder<'a> -> 'a
-    abstract Index : int -> Decoder<'a> -> 'a
 
 type IOptionalGetter =
-    abstract Field : string -> Decoder<'a> -> 'a -> 'a
-    abstract At : List<string> -> Decoder<'a> -> 'a -> 'a
-    abstract Index : int -> Decoder<'a> -> 'a -> 'a
+    abstract Field : string -> Decoder<'a> -> 'a option
+    abstract At : List<string> -> Decoder<'a> -> 'a option
 
 type IGetters =
     abstract Required: IRequiredGetter
@@ -558,26 +559,25 @@ let object (builder: IGetters -> 'value) : Decoder<'value> =
                     member __.At (fieldNames : string list) (decoder : Decoder<_>) =
                         match decodeValue (at fieldNames decoder) v with
                         | Ok v -> v
-                        | Error msg -> failwith msg
-                    member __.Index (requestedIndex: int) (decoder : Decoder<_>) =
-                        match decodeValue (index requestedIndex decoder) v with
-                        | Ok v -> v
                         | Error msg -> failwith msg }
             member __.Optional =
                 { new IOptionalGetter with
-                    member __.Field (fieldName : string) (decoder : Decoder<_>) fallback =
-                        match optionalDecoder (field fieldName value) decoder fallback v with
-                        | Ok v -> v
-                        | Error msg ->
-                            failwith (errorToString msg)
-                    member __.At (fieldNames : string list) (decoder : Decoder<_>) fallback =
-                        match optionalDecoder (at fieldNames value) decoder fallback v with
-                        | Ok v -> v
-                        | Error msg ->
-                            failwith (errorToString msg)
-                    member __.Index (requestedIndex: int) (decoder : Decoder<_>) fallback =
-                        match optionalDecoder (index requestedIndex value) decoder fallback v with
-                        | Ok v -> v
-                        | Error msg ->
-                            failwith (errorToString msg) }
+                    member __.Field (fieldName : string) (decoder : Decoder<_>) =
+                        match decodeValueError (field fieldName decoder) v with
+                        | Ok v -> Some v
+                        | Error (BadField _ )
+                        | Error (BadPrimitive (_, null)) -> None
+                        | Error error ->
+                            failwith (errorToString error)
+                    member __.At (fieldNames : string list) (decoder : Decoder<_>) =
+                        if Helpers.isObject v then
+                            match decodeValueError (at fieldNames decoder) v with
+                            | Ok v -> Some v
+                            | Error (BadPath _ )
+                            | Error (BadType (_, null)) -> None
+                            | Error error ->
+                                printfn "%A" error
+                                failwith (errorToString error)
+                        else
+                            failwith (errorToString (BadType ("an object", v))) }
         } |> Ok

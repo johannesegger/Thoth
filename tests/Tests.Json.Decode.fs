@@ -281,12 +281,12 @@ Expecting an object with a field named `name` but instead got:
 
             testCase "field.Optional works" <| fun _ ->
                 let json = """{ "name": "maxime", "age": 25 }"""
-                let expected = Ok({ fieldA = "maxime" })
+                let expected = Ok({ optionalField = Some "maxime" })
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.Field "name" string "" }
+                            { optionalField = get.Optional.Field "name" string }
                         )
 
                 let actual =
@@ -296,12 +296,27 @@ Expecting an object with a field named `name` but instead got:
 
             testCase "field.Optional returns fallback value if field is missing" <| fun _ ->
                 let json = """{ "age": 25 }"""
-                let expected = Ok({ fieldA = "field was missing" })
+                let expected = Ok({ optionalField = None })
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.Field "name" string "field was missing" }
+                            { optionalField = get.Optional.Field "name" string }
+                        )
+
+                let actual =
+                    decodeString decoder json
+
+                equal expected actual
+
+            testCase "field.Optional returns Ok None if field is null" <| fun _ ->
+                let json = """{ "name": null, "age": 25 }"""
+                let expected = Ok({ optionalField = None })
+
+                let decoder =
+                    object
+                        (fun get ->
+                            { optionalField = get.Optional.Field "name" string }
                         )
 
                 let actual =
@@ -314,17 +329,13 @@ Expecting an object with a field named `name` but instead got:
                 let expected =
                     Error(
                         """
-I run into a `fail` decoder.
-I run into the following problems:
-
 Expecting a string but instead got: 12
-Expecting null but instead got: 12
                         """.Trim())
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.Field "name" string "" }
+                            { optionalField = get.Optional.Field "name" string }
                         )
 
                 let actual =
@@ -413,12 +424,12 @@ Node `firstname` is unkown.
             testCase "at.Optional works" <| fun _ ->
 
                 let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Ok({ fieldA = "maxime" })
+                let expected = Ok({ optionalField = Some "maxime" })
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                            { optionalField = get.Optional.At [ "user"; "name" ] string }
                         )
 
                 let actual =
@@ -428,12 +439,12 @@ Node `firstname` is unkown.
 
             testCase "at.Optional returns Ok None if non-object in path" <| fun _ ->
                 let json = """{ "user": "maxime" }"""
-                let expected = Ok({ fieldA = "" })
+                let expected = Ok({ optionalField = None })
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                            { optionalField = get.Optional.At [ "user"; "name" ] string }
                         )
 
                 let actual =
@@ -443,12 +454,12 @@ Node `firstname` is unkown.
 
             testCase "at.Optional returns Ok None if field missing" <| fun _ ->
                 let json = """{ "user": { "name": "maxime", "age": 25 } }"""
-                let expected = Ok({ fieldA = "" })
+                let expected = Ok({ optionalField = None })
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.At [ "user"; "firstname" ] string "" }
+                            { optionalField = get.Optional.At [ "user"; "firstname" ] string }
                         )
 
                 let actual =
@@ -458,20 +469,12 @@ Node `firstname` is unkown.
 
             testCase "at.Optional returns Error if type is incorrect" <| fun _ ->
                 let json = """{ "user": { "name": 12, "age": 25 } }"""
-                let expected =
-                    Error
-                        ("""
-I run into a `fail` decoder.
-I run into the following problems:
-
-Expecting a string but instead got: 12
-Expecting null but instead got: 12
-                        """.Trim())
+                let expected = Error "Expecting a string but instead got: 12"
 
                 let decoder =
                     object
                         (fun get ->
-                            { fieldA = get.Optional.At [ "user"; "name" ] string "" }
+                            { optionalField = get.Optional.At [ "user"; "name" ] string }
                         )
 
                 let actual =
@@ -487,7 +490,8 @@ Expecting null but instead got: 12
                     object
                         (fun get ->
                             { Id = get.Required.Field "id" int
-                              Name = get.Optional.Field "name" string ""
+                              Name = get.Optional.Field "name" string
+                                        |> Option.defaultValue ""
                               Email = get.Required.Field "email" string
                               Followers = 0 }
                         )
@@ -499,111 +503,6 @@ Expecting null but instead got: 12
 
                 equal expected actual
 
-            testCase "index.Required works" <| fun _ ->
-                let json = """[ "maxime", "alfonso" ]"""
-                let expected = Ok({ fieldA = "maxime" })
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Required.Index 0 string }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
-
-            testCase "index.Required return an error if invalid index" <| fun _ ->
-                let json = """[ "maxime", "alfonso" ]"""
-                let expected =
-                    Error (
-                        """
-Expecting a longer array. Need index `4` but there are only `2` entries.
-[
-    "maxime",
-    "alfonso"
-]
-                        """.Trim())
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Required.Index 4 string }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
-
-            testCase "index.Optional works" <| fun _ ->
-                let json = """[ "maxime", "alfonso" ]"""
-                let expected = Ok({ fieldA = "maxime" })
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Optional.Index 0 string "fallback" }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
-
-            testCase "index.Optional works with fallback value if invalid index" <| fun _ ->
-                let json = """[ "maxime", "alfonso" ]"""
-                let expected = Ok({ fieldA = "fallback" })
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Optional.Index 4 string "fallback" }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
-
-            testCase "index.Required return an error if invalid type" <| fun _ ->
-                let json = """[ 12, 13 ]"""
-                let expected = Error "Expecting a string but instead got: 12"
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Required.Index 0 string }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
-
-            testCase "index.Optional return an error if invalid type" <| fun _ ->
-                let json = """[ 12, 13 ]"""
-                let expected =
-                    Error (
-                        """
-I run into a `fail` decoder.
-I run into the following problems:
-
-Expecting a string but instead got: 12
-Expecting null but instead got: 12
-                        """.Trim())
-
-                let decoder =
-                    object
-                        (fun get ->
-                            { fieldA = get.Optional.Index 0 string "fallback" }
-                        )
-
-                let actual =
-                    decodeString decoder json
-
-                equal expected actual
         ]
 
         testList "Object primitives" [
