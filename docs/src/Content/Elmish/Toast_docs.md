@@ -96,7 +96,7 @@ type Position =
 | `Toast.icon` | Set the icon |
 | `Toast.timeout` | Set the timeout in seconds |
 | `Toast.noTimeout` | No timeout, make sure to add a close button or dismiss on click |
-| `Toast.dismissOnClick` | Allow user to dismiss the toast by cliking on it |
+| `Toast.dismissOnClick` | Allow user to dismiss the toast by clicking on it |
 | `Toast.withCloseButton` | Add a close button |
 
 ### Trigger
